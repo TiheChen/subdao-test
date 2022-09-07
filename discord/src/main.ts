@@ -1,18 +1,15 @@
 import "reflect-metadata";
 
 import { dirname, importx } from "@discordx/importer";
+import { Koa } from "@discordx/koa";
 import {
-  Collection,
-  Intents,
-  Message,
-  MessageActionRow,
-  MessageButton,
-  Snowflake,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   TextChannel,
 } from "discord.js";
+import { IntentsBitField } from "discord.js";
 import { Client } from "discordx";
-import { Koa } from "@discordx/koa";
-import cors from "@koa/cors";
 
 export const bot = new Client({
   // To only use global commands (use @Guild for specific guild command), comment this line
@@ -20,11 +17,11 @@ export const bot = new Client({
 
   // Discord intents
   intents: [
-    Intents.FLAGS.GUILDS,
-    Intents.FLAGS.GUILD_MEMBERS,
-    Intents.FLAGS.GUILD_MESSAGES,
-    Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
-    Intents.FLAGS.GUILD_VOICE_STATES,
+    IntentsBitField.Flags.Guilds,
+    IntentsBitField.Flags.GuildMembers,
+    IntentsBitField.Flags.GuildMessages,
+    IntentsBitField.Flags.GuildMessageReactions,
+    IntentsBitField.Flags.GuildVoiceStates,
   ],
 
   // Debug logs are disabled in silent mode
@@ -43,43 +40,42 @@ bot.once("ready", async () => {
   // Synchronize applications commands with Discord
   await bot.initApplicationCommands();
 
-  // Synchronize applications command permissions with Discord
-  await bot.initApplicationPermissions();
-
   const verifyChannel = <TextChannel>(
     bot.channels.cache.get(`${process.env.VERIFY_CHANNEL_ID}`)
   );
 
-  const verifyButton = await verifyChannel.messages
-    .fetch()
-    .then((messages: Collection<Snowflake, Message>) =>
-      messages.find(
-        (message) =>
-          message.author.bot === true &&
-          message.author.discriminator === process.env.DISCORD_BOT_ID
-      )
+  function ensure<T>(
+    argument: T | undefined | null,
+    message: string = "This value was promised to be there."
+  ): T {
+    if (argument === undefined || argument === null) {
+      throw new TypeError(message);
+    }
+    return argument;
+  }
+
+  const verifyButton = await verifyChannel.messages.fetch().then((messages) => {
+    return messages.find(
+      (message) =>
+        message.author.bot &&
+        message.author.discriminator === process.env.BOT_ID
     );
+  });
+
+  console.log(verifyButton);
 
   if (verifyButton === undefined) {
-    const row = new MessageActionRow().addComponents(
-      new MessageButton()
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
         .setCustomId("primary")
         .setLabel("Verify Now!")
-        .setStyle("PRIMARY")
-    );
+        .setStyle(ButtonStyle.Primary)
+    ) as any;
 
     verifyChannel.send({
       components: [row],
     });
   }
-
-  // To clear all guild commands, uncomment this line,
-  // This is useful when moving from guild commands to global commands
-  // It must only be executed once
-  //
-  //  await bot.clearApplicationCommands(
-  //    ...bot.guilds.cache.map((g) => g.id)
-  //  );
 
   console.log("Bot started");
 });
@@ -95,28 +91,28 @@ async function run() {
   );
 
   // Let's start the bot
-  if (!process.env.DISCORD_BOT_TOKEN) {
-    throw Error("Could not find DISCORD_BOT_TOKEN in your environment");
+  if (!process.env.BOT_TOKEN) {
+    throw Error("Could not find BOT_TOKEN in your environment");
   }
 
   // Log in with your bot token
-  await bot.login(process.env.DISCORD_BOT_TOKEN);
+  await bot.login(process.env.BOT_TOKEN);
 
   // ************* rest api section: start **********
 
   // api: prepare server
-  const app = new Koa();
+  const server = new Koa();
 
   // api: need to build the api server first
-  await app.build();
-  app.use(cors());
-  
+  await server.build();
+
   // api: let's start the server now
   const port = process.env.PORT ?? 7000;
-  app.listen(port, () => {
+  server.listen(port, () => {
     console.log(`discord api server started on ${port}`);
     console.log(`visit localhost:${port}/guilds`);
   });
+
   // ************* rest api section: end **********
 }
 
